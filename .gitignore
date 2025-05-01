@@ -1,2 +1,5 @@
 .DS_Store
 **/.DS_Store
+data/sentiment140/*
+data/stock_market_dataset/*
+.venv
