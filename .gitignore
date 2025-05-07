@@ -3,3 +3,4 @@
 data/sentiment140/*
 data/stock_market_dataset/*
 .venv
+**/__pycache__
