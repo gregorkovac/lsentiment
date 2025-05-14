@@ -2,5 +2,7 @@
 **/.DS_Store
 data/sentiment140/*
 data/stock_market_dataset/*
+data/processed
+data/*
 .venv
 **/__pycache__

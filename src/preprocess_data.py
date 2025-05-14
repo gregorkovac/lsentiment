@@ -82,10 +82,10 @@ def read_stocks(data_path, min_date = datetime(2009, 4, 6), max_date = datetime(
     for etf in tqdm(dir_etfs):
         df_etf = pd.read_csv(os.path.join(path_etfs, etf), parse_dates=["Date"])
 
-        if pd.to_datetime(df_etf["Date"].max()) < min_date or pd.to_datetime(df_etf["Date"].min()) > max_date:
-            continue
+        # if pd.to_datetime(df_etf["Date"].max()) < min_date or pd.to_datetime(df_etf["Date"].min()) > max_date:
+        #     continue
 
-        df_etf = df_etf[(df_etf["Date"] >= min_date) & (df_etf["Date"] <= max_date)].copy()
+        # df_etf = df_etf[(df_etf["Date"] >= min_date) & (df_etf["Date"] <= max_date)].copy()
 
         df_etf["Name"] = etf.split(".")[0]
 
@@ -94,10 +94,10 @@ def read_stocks(data_path, min_date = datetime(2009, 4, 6), max_date = datetime(
     for stock in tqdm(dir_stocks):
         df_stock = pd.read_csv(os.path.join(path_stocks, stock), parse_dates=["Date"])
 
-        if pd.to_datetime(df_stock["Date"].max()) < min_date or pd.to_datetime(df_stock["Date"].min()) > max_date:
-            continue
+        # if pd.to_datetime(df_stock["Date"].max()) < min_date or pd.to_datetime(df_stock["Date"].min()) > max_date:
+        #     continue
 
-        df_stock = df_stock[(df_stock["Date"] >= min_date) & (df_stock["Date"] <= max_date)].copy()
+        # df_stock = df_stock[(df_stock["Date"] >= min_date) & (df_stock["Date"] <= max_date)].copy()
 
         df_stock["Name"] = stock.split(".")[0]
 
