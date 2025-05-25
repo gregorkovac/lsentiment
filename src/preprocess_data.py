@@ -3,6 +3,8 @@ import os
 from datetime import datetime, date
 from tqdm import tqdm
 import re
+import numpy as np
+import torch
 
 ############################ SENTIMENT140 ############################
 
@@ -123,10 +125,113 @@ def convert_date(d):
 
     return date(year=year, month=month, day=day)
 
-def apply_time_window(df, price_col_name, n):
+def apply_time_window(df, col_name, n):
+    df = df.copy()
     for i in range(n, 0, -1):
-        df[f"{price_col_name}-{i}"] = df[price_col_name].shift(i)
+        df[f"{col_name}-{i}"] = df[col_name].shift(i)
 
     df.dropna(inplace=True)
 
     return df
+
+# def prepare_stocks_date(file_path, date_column_name="Date", focus_price_column_name="Close"):
+#     df_stocks = pd.read_csv(file_path)
+
+#     df_stocks = df_stocks[[date_column_name, focus_price_column_name]]
+
+#     stock_mean = df_stocks[focus_price_column_name].mean()
+#     stock_std = df_stocks[focus_price_column_name].std()
+
+#     df_stocks[focus_price_column_name] = (df_stocks[focus_price_column_name] - stock_mean) / stock_std
+
+#     df_stocks["Date"] = df_stocks["Date"].apply(lambda x: x.split(" ")[0])
+#     df_stocks["Date"] = df_stocks["Date"].apply(convert_date)
+
+#     df_stocks.set_index("Date", inplace=True)
+
+#     df_stocks = apply_time_window(df = df_stocks,
+#                                                   price_col_name=FOCUS_PRICE,
+#                                                   n = WINDOW_SIZE)
+
+#     return df_stocks, stock_mean, stock_std
+
+def preprocess_data(stock_path, sentiment_path, stocks_date_col="date", stocks_price_col="close", sent_date_col="timestamp", sent_sent_col="sentiment"):
+    # Prepare stocks data
+    df_stocks = pd.read_csv(stock_path)
+
+    df_stocks = df_stocks[[stocks_date_col, stocks_price_col]]
+
+    df_stocks[stocks_date_col] = df_stocks[stocks_date_col].apply(lambda x: x.split(" ")[0])
+    df_stocks[stocks_date_col] = df_stocks[stocks_date_col].apply(convert_date)
+
+    df_stocks.set_index(stocks_date_col, inplace=True)
+
+    # Prepare sentiment data
+    df_sentiment = pd.read_csv(sentiment_path)
+
+    df_sentiment = df_sentiment[[sent_date_col, sent_sent_col]]
+
+    df_sentiment.columns = [sent_date_col, sent_sent_col]
+
+    df_sentiment[sent_date_col] = pd.to_datetime(df_sentiment[sent_date_col])
+    df_sentiment.set_index(sent_date_col, inplace=True)
+
+    # Merge data
+    df = pd.merge(df_stocks, df_sentiment, how="left", left_index=True, right_index=True)
+
+    # Drop rows with NA sentiment
+    df = df[df[sent_sent_col].notna()]
+
+    df.columns = ["price", "sentiment"]
+
+    return df
+
+def apply_time_window_both(df, window_size):
+    df = apply_time_window(df, col_name="price", n=window_size)
+    df = apply_time_window(df, col_name="sentiment", n=window_size)
+
+    df = df[df["price"].notna()]
+    df = df[df["sentiment"].notna()]
+
+    return df
+
+def df_to_torch(df, window_size):
+    Xy = df.to_numpy()
+    
+    X = Xy[:, 2:]
+    X = np.stack((X[:, :window_size], X[:, window_size:]), axis=2)
+    X = torch.tensor(X, dtype=torch.float32)
+
+    y = Xy[:, :1]
+    y = torch.tensor(y, dtype=torch.float32)
+
+    return X, y
+
+def split_and_format_data(df, window_size=3, split1=0.7, split2=0.9):
+    split1_ = int(len(df) * split1)
+    split2_ = int(len(df) * split2)
+
+    df_train = df.iloc[:split1_]
+    df_val = df.iloc[split1_:split2_]
+    df_test = df.iloc[split2_:]
+
+    mean = df_train["price"].mean()
+    std = df_train["price"].std()
+
+    df_train = df_train.copy()
+    df_val = df_val.copy()
+    df_test = df_test.copy()
+
+    df_train["price"] = (df_train["price"] - mean) / std
+    df_val["price"] = (df_val["price"] - mean) / std
+    df_test["price"] = (df_test["price"] - mean) / std
+
+    df_train = apply_time_window_both(df=df_train, window_size=window_size)
+    df_val = apply_time_window_both(df=df_val, window_size=window_size)
+    df_test = apply_time_window_both(df=df_test, window_size=window_size)
+
+    X_train, y_train = df_to_torch(df_train, window_size)
+    X_val, y_val = df_to_torch(df_val, window_size)
+    X_test, y_test = df_to_torch(df_test, window_size)
+
+    return X_train, y_train, X_val, y_val, X_test, y_test, mean, std

@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 class LSenTiMent(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, window_size, sentiment = True):
+    def __init__(self, input_size, hidden_size, num_layers, window_size, mlp_layers, mlp_hidden_size, sentiment = True):
         super().__init__()
 
         # Save parameters
@@ -29,14 +29,14 @@ class LSenTiMent(nn.Module):
 
         # Final multi-layer perceptron
         self.mlp = nn.Sequential(
-            nn.Linear(window_size, 8),
+            nn.Linear(1 + hidden_size, mlp_hidden_size),
             nn.ReLU(),
-            nn.Linear(8, 16),
-            nn.ReLU(),
-            nn.Linear(16, 8),
-            nn.ReLU(),
-            nn.Linear(8, 1),
         )
+
+        for _ in range(mlp_layers):
+            self.mlp.append(nn.Linear(mlp_hidden_size, mlp_hidden_size))
+            self.mlp.append(nn.ReLU())
+        self.mlp.append(nn.Linear(mlp_hidden_size, 1))
 
     def forward(self, x):
         # Extract batch size
@@ -72,10 +72,8 @@ class LSenTiMent(nn.Module):
             # Pass the joint values through the MLP to obtain the final stock price
             x = self.mlp(x)
         else:
-            # TODO: x_stock = x[:, :, 0:1]
-
             # Pass the stock prices throught the LSTM
-            x, _ = self.lstm(x, (h_0, c_0))
+            x, _ = self.lstm_stock(x, (h_0, c_0))
 
             # Extract last prediction
             x = x[:, -1, :]
