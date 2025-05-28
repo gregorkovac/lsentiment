@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '..', 'finBERT')))
 import finBERT.finbert.finbert as finbert
 from transformers import AutoModelForSequenceClassification
 import logging
+import argparse
 
 # Disable logging from FinBERT
 logging.getLogger().setLevel(logging.ERROR)
@@ -34,24 +35,25 @@ def get_sentiment_for_df(df):
 
 def main():
 
-    args = sys.argv
-    if len(args) == 1:
-        print("Usage: python extract_sentiment.py <data_path> <timestamp_name> <text_name>")
-        print("\t\t <data_path> - path to CSV file with texts")
-        print("\t\t <timestamp_name> - name of the timestamp column in the CSV")
-        print("\t\t <text_name> - name of the text column in the CSV")
-        exit(0)
+    parser = argparse.ArgumentParser()
 
-    data_path = args[1]
-    if len(args) > 2:
-        timestamp_name = args[2]
-    else:
-        timestamp_name = "timestamp"
+    parser.add_argument("--data_path",
+                    help="Path to CSV file with texts/tweets",
+                    type=str)
+    parser.add_argument("--timestamp_name",
+                    help="Name of the timestamp column in the CSV",
+                    default="timestamp",
+                    type=str)
+    parser.add_argument("--text_name",
+                    help="Name of the text/tweet column in the CSV",
+                    default="description",
+                    type=str)
 
-    if len(args) > 3:
-        text_name = args[3]
-    else:
-        text_name = "description"
+    args = parser.parse_args()
+    
+    data_path = args.data_path
+    timestamp_name = args.timestamp_name
+    text_name = args.text_name
 
     print("Reading data...")
 

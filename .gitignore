@@ -1,9 +1,9 @@
 .DS_Store
 **/.DS_Store
-data/sentiment140/*
-data/stock_market_dataset/*
-data/processed
-data/*
+data/maang_stocks/*
+data/split
+data/financial_tweets.csv
+data/financial_tweets_sentiments.csv
 .venv
 **/__pycache__
 finBERT
