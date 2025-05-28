@@ -5,6 +5,9 @@ from tqdm import tqdm
 import re
 import numpy as np
 import torch
+import pickle
+import argparse
+import json
 
 ############################ SENTIMENT140 ############################
 
@@ -207,7 +210,7 @@ def df_to_torch(df, window_size):
 
     return X, y
 
-def split_and_format_data(df, window_size=3, split1=0.7, split2=0.9):
+def split_data(df, split1, split2):
     split1_ = int(len(df) * split1)
     split2_ = int(len(df) * split2)
 
@@ -215,16 +218,20 @@ def split_and_format_data(df, window_size=3, split1=0.7, split2=0.9):
     df_val = df.iloc[split1_:split2_]
     df_test = df.iloc[split2_:]
 
-    mean = df_train["price"].mean()
-    std = df_train["price"].std()
+    return df_train, df_val, df_test
 
+def format_data(df_train, df_val, df_test, price_mean, price_std, sentiment_mean, sentiment_std, window_size=3):
     df_train = df_train.copy()
     df_val = df_val.copy()
     df_test = df_test.copy()
 
-    df_train["price"] = (df_train["price"] - mean) / std
-    df_val["price"] = (df_val["price"] - mean) / std
-    df_test["price"] = (df_test["price"] - mean) / std
+    df_train["price"] = (df_train["price"] - price_mean) / price_std
+    df_val["price"] = (df_val["price"] - price_mean) / price_std
+    df_test["price"] = (df_test["price"] - price_mean) / price_std
+
+    df_train["sentiment"] = (df_train["sentiment"] - sentiment_mean) / sentiment_std
+    df_val["sentiment"] = (df_val["sentiment"] - sentiment_mean) / sentiment_std
+    df_test["sentiment"] = (df_test["sentiment"] - sentiment_mean) / sentiment_std
 
     df_train = apply_time_window_both(df=df_train, window_size=window_size)
     df_val = apply_time_window_both(df=df_val, window_size=window_size)
@@ -234,4 +241,136 @@ def split_and_format_data(df, window_size=3, split1=0.7, split2=0.9):
     X_val, y_val = df_to_torch(df_val, window_size)
     X_test, y_test = df_to_torch(df_test, window_size)
 
-    return X_train, y_train, X_val, y_val, X_test, y_test, mean, std
+    return X_train, y_train, X_val, y_val, X_test, y_test
+
+def process_and_save_data(stock_paths, sentiment_path, window_size, out_path):
+    df_train = []
+    df_val = []
+    df_test = []
+    
+    train_prices = []
+    train_sentiments = []
+    
+    for stock_path in tqdm(stock_paths):
+        stock_name = stock_path.split("/")[-1].split(".csv")[0]
+    
+        if stock_name in ["netflix", "meta"]:
+            date_col = "Date"
+            price_col = "Close"
+        else:
+            date_col = "date"
+            price_col = "close"
+    
+        df = preprocess_data(stock_path, sentiment_path, stocks_date_col=date_col, stocks_price_col=price_col)
+        df_train_, df_val_, df_test_ = split_data(df, split1=0.7, split2=0.9)
+        
+        df_train.append(df_train_)
+        df_val.append(df_val_)
+        df_test.append(df_test_)
+    
+        train_prices.append(df_train_["price"].values)
+        train_sentiments.append(df_train_["sentiment"].values)
+    
+    price_mean = np.mean(np.concatenate(train_prices))
+    price_std = np.std(np.concatenate(train_prices))
+    
+    sentiment_mean = np.mean(np.concatenate(train_sentiments))
+    sentiment_std = np.std(np.concatenate(train_sentiments))
+    
+    X_train, y_train = [], []
+    X_val, y_val = [], []
+    
+    Xy_val = []
+    Xy_test = []
+    
+    for i in range(len(df_train)):
+        X_train_, y_train_, X_val_, y_val_, X_test_, y_test_ = format_data(df_train[i], df_val[i], df_test[i], price_mean, price_std, sentiment_mean, sentiment_std, window_size)
+    
+        X_train.append(X_train_)
+        y_train.append(y_train_)
+    
+        X_val.append(X_val_)
+        y_val.append(y_val_)
+    
+        Xy_test.append((X_test_, y_test_))
+        Xy_val.append((X_val_, y_val_))
+
+
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    with open(os.path.join(out_path, "X_train.pkl"), "wb") as f:
+        pickle.dump(X_train, f)
+
+    with open(os.path.join(out_path, "y_train.pkl"), "wb") as f:
+        pickle.dump(y_train, f)
+
+    with open(os.path.join(out_path, "X_val.pkl"), "wb") as f:
+        pickle.dump(X_val, f)
+
+    with open(os.path.join(out_path, "y_val.pkl"), "wb") as f:
+        pickle.dump(y_val, f)
+
+    with open(os.path.join(out_path, "Xy_test.pkl"), "wb") as f:
+        pickle.dump(Xy_test, f)
+
+    with open(os.path.join(out_path, "norms.json"), "w") as f:
+        json.dump({
+            "price_mean": price_mean,
+            "price_std": price_std,
+            "sentiment_mean": sentiment_mean,
+            "sentiment_std": sentiment_std
+        }, f)
+
+    print(f"Saved split data to {out_path}")
+
+    
+
+    # X_train = torch.cat(X_train)
+    # y_train = torch.cat(y_train)
+    
+    # X_val = torch.cat(X_val)
+    # y_val = torch.cat(y_val)
+    
+    # # X_train, y_train, X_val, y_val, X_test, y_test, mean, std = split_and_format_data(df, window_size=WINDOW_SIZE, split1=0.7, split2=0.9)
+    # train_dataloader, val_dataloader = get_dataloaders(X_train, y_train, X_val, y_val, batch_size=64)
+    
+    # print(f"Train set length = {len(X_train)}")
+    # print(f"Val set length = {len(X_val)}")
+    # print(f"Test set length (per stock) = {len(Xy_test[0][0])}")
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--stocks_path",
+                        help="Path to folder containing stocks CSV-s",
+                        default=os.path.join(os.path.dirname(__file__), "../data/maang_stocks"))
+    parser.add_argument("--sentiment_path",
+                        help="Path to sentiment CSV.",
+                        default=os.path.join(os.path.dirname(__file__), "../data/financial_tweets_sentiments.csv"))
+    parser.add_argument("--out_path",
+                        help="Output folder path",
+                        default=os.path.join(os.path.dirname(__file__), "../data/split"))
+    parser.add_argument("--window_size",
+                        help="Size of the time series window",
+                        default=10)
+    
+    args = parser.parse_args()
+
+    stocks_path = args.stocks_path
+    sentiment_path = args.sentiment_path
+    out_path = args.out_path
+    window_size = args.window_size
+
+    stock_paths = []
+    for s in os.listdir(stocks_path):
+        if ".csv" in s:
+            stock_paths.append(os.path.join(stocks_path, s))
+
+    process_and_save_data(stock_paths=stock_paths,
+                          sentiment_path=sentiment_path,
+                          out_path=out_path,
+                          window_size=window_size)
+    
+if __name__ == "__main__":
+    main()
