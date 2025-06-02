@@ -2,8 +2,10 @@
 **/.DS_Store
 data/maang_stocks/*
 data/split
+data/split0
 data/financial_tweets.csv
 data/financial_tweets_sentiments.csv
+data/financial_tweets_sentiments0.csv
 .venv
 **/__pycache__
 finBERT
