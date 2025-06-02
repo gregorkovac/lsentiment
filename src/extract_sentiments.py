@@ -3,11 +3,12 @@ import os
 import sys
 from tqdm import tqdm
 sys.path.insert(0, "..")
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), '..', 'finBERT')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..", "finBERT")))
 import finBERT.finbert.finbert as finbert
 from transformers import AutoModelForSequenceClassification
 import logging
 import argparse
+import numpy as np
 
 # Disable logging from FinBERT
 logging.getLogger().setLevel(logging.ERROR)
@@ -16,20 +17,28 @@ def get_sentiment(text, model):
     # Get predictions from FinBERT
     result = finbert.predict(text, model)
 
-    # Return mean sentiment
-    return result["sentiment_score"].mean()
+    # Return mean logits
+    logits = np.array(result["logit"].tolist())
+    mean_logits = logits.mean(axis=0)
+
+    return mean_logits
+    # return result["sentiment_score"].mean()
 
 def get_sentiment_for_df(df):
 
     print("Loading model...")
     model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert",num_labels=3,cache_dir=None)
-
+    
     # Get average sentiment for each day
     sentiments = []
     for text in tqdm(df["description"]):
         sentiments.append(get_sentiment(text, model))
+    
+    sentiments = np.array(sentiments)
 
-    df["sentiments"] = sentiments
+    df["neg"] = sentiments[:, 0]
+    df["neu"] = sentiments[:, 1]
+    df["pos"] = sentiments[:, 2]
 
     return df
 
@@ -39,6 +48,7 @@ def main():
 
     parser.add_argument("--data_path",
                     help="Path to CSV file with texts/tweets",
+                    default="../data/financial_tweets.csv",
                     type=str)
     parser.add_argument("--timestamp_name",
                     help="Name of the timestamp column in the CSV",

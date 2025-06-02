@@ -13,9 +13,6 @@ import matplotlib.pyplot as plt
 import argparse
 import pickle
 
-STOCK_PATH = "../data/apple_stock/AAPL_1980-12-03_2025-03-15.csv"
-SENTIMENT_PATH = "../data/financial_tweets/financial_tweets_sentiments.csv"
-
 class StockDataset(Dataset):
     def __init__(self, X, y):
         self.X = X
@@ -146,9 +143,6 @@ def main():
                         help="Model save directory",
                         default=os.path.join(os.path.dirname(__file__), "../models/"),
                         type=str)
-    parser.add_argument("--test",
-                        help="Whether to run evaluation on the model or not",
-                        action="store_true")
     parser.add_argument("--use_sentiment",
                         help="Whether to use sentiment in the model or not",
                         action="store_true")
@@ -202,11 +196,9 @@ def main():
                         type=float)
 
     
-
     args = parser.parse_args()
 
     data_path = args.data_path
-    test = args.test
     model_path = args.model_path
     use_sentiment = args.use_sentiment
     lstm_hidden_size = args.lstm_hidden_size

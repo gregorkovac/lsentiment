@@ -172,9 +172,12 @@ def preprocess_data(stock_path, sentiment_path, stocks_date_col="date", stocks_p
     # Prepare sentiment data
     df_sentiment = pd.read_csv(sentiment_path)
 
-    df_sentiment = df_sentiment[[sent_date_col, sent_sent_col]]
+    # df_sentiment = df_sentiment[[sent_date_col, sent_sent_col]]
+    df_sentiment = df_sentiment[[sent_date_col, "neg", "neu", "pos"]]
 
-    df_sentiment.columns = [sent_date_col, sent_sent_col]
+
+    # df_sentiment.columns = [sent_date_col, sent_sent_col]
+    df_sentiment.columns = [sent_date_col, "neg", "neu", "pos"]
 
     df_sentiment[sent_date_col] = pd.to_datetime(df_sentiment[sent_date_col])
     df_sentiment.set_index(sent_date_col, inplace=True)
@@ -183,26 +186,40 @@ def preprocess_data(stock_path, sentiment_path, stocks_date_col="date", stocks_p
     df = pd.merge(df_stocks, df_sentiment, how="left", left_index=True, right_index=True)
 
     # Drop rows with NA sentiment
-    df = df[df[sent_sent_col].notna()]
+    # df = df[df[sent_sent_col].notna()]
+    df = df[df["neg"].notna()]
+    df = df[df["neu"].notna()]
+    df = df[df["pos"].notna()]
 
-    df.columns = ["price", "sentiment"]
+    # df.columns = ["price", "sentiment"]
+    df.columns = ["price", "neg", "neu", "pos"]
 
     return df
 
 def apply_time_window_both(df, window_size):
     df = apply_time_window(df, col_name="price", n=window_size)
-    df = apply_time_window(df, col_name="sentiment", n=window_size)
+    df = apply_time_window(df, col_name="neg", n=window_size)
+    df = apply_time_window(df, col_name="neu", n=window_size)
+    df = apply_time_window(df, col_name="pos", n=window_size)
 
     df = df[df["price"].notna()]
-    df = df[df["sentiment"].notna()]
+    # df = df[df["sentiment"].notna()]
+
+    df = df.drop(columns=["pos"])
+    df = df.drop(columns=["neu"])
+    df = df.drop(columns=["neg"])
 
     return df
 
 def df_to_torch(df, window_size):
+
     Xy = df.to_numpy()
-    
-    X = Xy[:, 2:]
-    X = np.stack((X[:, :window_size], X[:, window_size:]), axis=2)
+
+    X = Xy[:, 1:]
+    X = np.stack((X[:, :window_size], 
+                  X[:, window_size:2*window_size],
+                  X[:, 2*window_size:3*window_size],
+                  X[:, 3*window_size:]), axis=2)
     X = torch.tensor(X, dtype=torch.float32)
 
     y = Xy[:, :1]
@@ -229,9 +246,9 @@ def format_data(df_train, df_val, df_test, price_mean, price_std, sentiment_mean
     df_val["price"] = (df_val["price"] - price_mean) / price_std
     df_test["price"] = (df_test["price"] - price_mean) / price_std
 
-    df_train["sentiment"] = (df_train["sentiment"] - sentiment_mean) / sentiment_std
-    df_val["sentiment"] = (df_val["sentiment"] - sentiment_mean) / sentiment_std
-    df_test["sentiment"] = (df_test["sentiment"] - sentiment_mean) / sentiment_std
+    # df_train["sentiment"] = (df_train["sentiment"] - sentiment_mean) / sentiment_std
+    # df_val["sentiment"] = (df_val["sentiment"] - sentiment_mean) / sentiment_std
+    # df_test["sentiment"] = (df_test["sentiment"] - sentiment_mean) / sentiment_std
 
     df_train = apply_time_window_both(df=df_train, window_size=window_size)
     df_val = apply_time_window_both(df=df_val, window_size=window_size)
@@ -269,13 +286,19 @@ def process_and_save_data(stock_paths, sentiment_path, window_size, out_path):
         df_test.append(df_test_)
     
         train_prices.append(df_train_["price"].values)
-        train_sentiments.append(df_train_["sentiment"].values)
+        # train_sentiments.append(df_train_["sentiment"].values)
+        # train_sentiments.append(df_train_["pos"].values)
+        # train_sentiments.append(df_train_["neu"].values)
+        # train_sentiments.append(df_train_["neg"].values)
     
     price_mean = np.mean(np.concatenate(train_prices))
     price_std = np.std(np.concatenate(train_prices))
     
-    sentiment_mean = np.mean(np.concatenate(train_sentiments))
-    sentiment_std = np.std(np.concatenate(train_sentiments))
+    # sentiment_mean = np.mean(np.concatenate(train_sentiments))
+    # sentiment_std = np.std(np.concatenate(train_sentiments))
+
+    sentiment_mean = 0
+    sentiment_std = 1
     
     X_train, y_train = [], []
     X_val, y_val = [], []
