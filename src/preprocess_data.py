@@ -370,13 +370,13 @@ def main():
                         default=os.path.join(os.path.dirname(__file__), "../data/maang_stocks"))
     parser.add_argument("--sentiment_path",
                         help="Path to sentiment CSV.",
-                        default=os.path.join(os.path.dirname(__file__), "../data/financial_tweets_sentiments.csv"))
+                        default=os.path.join(os.path.dirname(__file__), "../data/financial_sentiments.csv"))
     parser.add_argument("--out_path",
                         help="Output folder path",
                         default=os.path.join(os.path.dirname(__file__), "../data/split"))
     parser.add_argument("--window_size",
                         help="Size of the time series window",
-                        default=10)
+                        default=5)
     
     args = parser.parse_args()
 

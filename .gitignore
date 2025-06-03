@@ -6,6 +6,7 @@ data/split0
 data/financial_tweets.csv
 data/financial_tweets_sentiments.csv
 data/financial_tweets_sentiments0.csv
+data/financial_sentiments_full.csv
 .venv
 **/__pycache__
 finBERT

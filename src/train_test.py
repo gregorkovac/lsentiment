@@ -12,6 +12,7 @@ from IPython.display import clear_output
 import matplotlib.pyplot as plt
 import argparse
 import pickle
+import json
 
 class StockDataset(Dataset):
     def __init__(self, X, y):
@@ -34,20 +35,23 @@ def get_dataloaders(X_train, y_train, X_val, y_val, batch_size):
 
     return train_dataloader, val_dataloader
 
-def train(train_dataloader, val_dataloader, sentiment, lstm_hidden_size, lstm_num_layers, window_size, lr, epochs, use_scheduler, scheduler_step, scheduler_gamma, device, mlp_layers, mlp_hidden_size, weight_decay, dropout_rate, plot_loss=True):
+def train(train_dataloader, val_dataloader, sentiment, lstm1_hidden_size, lstm1_num_layers, lstm2_hidden_size, lstm2_num_layers, window_size, lr, epochs, use_scheduler, scheduler_step, scheduler_gamma, device, mlp_layers, mlp_hidden_size, weight_decay, dropout_rate, double, plot_loss=True):
     np.random.seed(0)
     torch.manual_seed(0)
 
     input_size = 1
 
     model = LSenTiMent(input_size=input_size,
-             hidden_size=lstm_hidden_size,
-             num_layers=lstm_num_layers,
+             hidden_size1=lstm1_hidden_size,
+             num_layers1=lstm1_num_layers,
+             hidden_size2=lstm2_hidden_size,
+             num_layers2=lstm2_num_layers,
              window_size=window_size,
              sentiment=sentiment,
              dropout_rate=dropout_rate,
              mlp_hidden_size=mlp_hidden_size,
-             mlp_layers=mlp_layers).to(device)
+             mlp_layers=mlp_layers,
+             double=double).to(device)
 
     loss = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -112,6 +116,8 @@ def train(train_dataloader, val_dataloader, sentiment, lstm_hidden_size, lstm_nu
             best_val_loss = val_loss
             best_model_state = model.state_dict()
 
+            torch.save(model.state_dict(), "checkpoint.pt")
+
         val_losses.append(val_loss)
 
         if use_scheduler:
@@ -150,11 +156,19 @@ def main():
                         help="Whether to use learning rate scheduler or not",
                         action="store_true")
 
-    parser.add_argument("--lstm_hidden_size",
+    parser.add_argument("--lstm1_hidden_size",
                         help="Hidden size of the LSTM",
                         default=64,
                         type=int)
-    parser.add_argument("--lstm_num_layers",
+    parser.add_argument("--lstm1_num_layers",
+                        help="Number of layers of the LSTM",
+                        default=1,
+                        type=int)
+    parser.add_argument("--lstm2_hidden_size",
+                        help="Hidden size of the LSTM",
+                        default=64,
+                        type=int)
+    parser.add_argument("--lstm2_num_layers",
                         help="Number of layers of the LSTM",
                         default=1,
                         type=int)
@@ -168,7 +182,7 @@ def main():
                         type=int)
     parser.add_argument("--window_size",
                         help="Size of the time series window",
-                        default=10,
+                        default=5,
                         type=int)
     parser.add_argument("--lr",
                         help="Learning rate",
@@ -194,6 +208,12 @@ def main():
                         help="Dropout rate parameter",
                         default=0,
                         type=float)
+    parser.add_argument("--double",
+                        help="Whether to use two LSTM-s when using sentiments",
+                        action="store_true")
+    parser.add_argument("--final",
+                        help="Whether to also use the validation set for training",
+                        action="store_true")
 
     
     args = parser.parse_args()
@@ -201,8 +221,10 @@ def main():
     data_path = args.data_path
     model_path = args.model_path
     use_sentiment = args.use_sentiment
-    lstm_hidden_size = args.lstm_hidden_size
-    lstm_num_layers = args.lstm_num_layers
+    lstm1_hidden_size = args.lstm1_hidden_size
+    lstm1_num_layers = args.lstm1_num_layers
+    lstm2_hidden_size = args.lstm2_hidden_size
+    lstm2_num_layers = args.lstm2_num_layers
     mlp_layers = args.mlp_layers
     mlp_hidden_size = args.mlp_hidden_size
     window_size = args.window_size
@@ -213,6 +235,10 @@ def main():
     scheduler_gamma = args.scheduler_gamma
     weight_decay = args.weight_decay
     dropout_rate = args.dropout_rate
+    double = args.double
+    final = args.final
+
+    print(vars(args))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -234,13 +260,19 @@ def main():
     X_val = torch.cat(X_val)
     y_val = torch.cat(y_val)
 
+    if final:
+        X_train = torch.cat((X_train, X_val), dim=0)
+        y_train = torch.cat((y_train, y_val), dim=0)
+
     train_dataloader, val_dataloader = get_dataloaders(X_train, y_train, X_val, y_val, batch_size=64)
 
     model = train(train_dataloader=train_dataloader,
                     val_dataloader=val_dataloader,
                     sentiment=use_sentiment,
-                    lstm_hidden_size=lstm_hidden_size,
-                    lstm_num_layers=lstm_num_layers,
+                    lstm1_hidden_size=lstm1_hidden_size,
+                    lstm1_num_layers=lstm1_num_layers,
+                    lstm2_hidden_size=lstm2_hidden_size,
+                    lstm2_num_layers=lstm2_num_layers,
                     window_size=window_size,
                     lr=lr,
                     epochs=epochs,
@@ -252,14 +284,23 @@ def main():
                     mlp_hidden_size=mlp_hidden_size,
                     weight_decay=weight_decay,
                     dropout_rate=dropout_rate,
+                    double=double,
                     plot_loss=False)
 
     if use_sentiment:
-        model_file_path = os.path.join(model_path, "model_sentiment.pt")
+        if double:
+            model_file_path = os.path.join(model_path, "model_sentiment_double.pt")
+            model_params_path = os.path.join(model_path, "model_sentiment_double_params.json")
+        else:
+            model_file_path = os.path.join(model_path, "model_sentiment_single.pt")
+            model_params_path = os.path.join(model_path, "model_sentiment_single_params.json")
     else:
         model_file_path = os.path.join(model_path, "model_no_sentiment.pt")
+        model_params_path = os.path.join(model_path, "model_no_sentiment_params.json")
 
     torch.save(model.state_dict(), model_file_path)
+    with open(model_params_path, "w") as f:
+        json.dump(vars(args), f)
 
     print(f"Saved model to {model_file_path}")
 

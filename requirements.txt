@@ -1,0 +1,9 @@
+ipykernel
+nltk
+pip
+PySocks
+scikit-learn
+seaborn
+spacy
+torch
+transformers
